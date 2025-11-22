@@ -14,59 +14,6 @@ import {
   View
 } from 'react-native';
 
-<<<<<<< HEAD
-import { useTranslation } from '@/hooks/useTranslation';
-
-const PIXEL_FONT = 'monospace';
-
-// Image Map
-const CROP_IMAGES: { [key: string]: any } = {
-  banana: require('../assets/images/crops/banana.png'),
-  coffee: require('../assets/images/crops/coffee.png'),
-  black_pepper: require('../assets/images/crops/black_pepper.png'),
-  coconut: require('../assets/images/crops/coconut.png'),
-  cardamom: require('../assets/images/crops/cardamom.png'),
-  ginger: require('../assets/images/crops/ginger.png'),
-};
-
-const PriceCard: React.FC<any> = ({ t, crop_id, name, unit, price, trend, change }) => {
-  let trendColor = '#B0B0B0';
-  let trendIcon = 'minus';
-  let trendText = 'STABLE';
-
-  if (trend === 'up') {
-    trendColor = '#4CAF50';
-    trendIcon = 'caret-up';
-    trendText = `+${change}`;
-  } else if (trend === 'down') {
-    trendColor = '#C0392B';
-    trendIcon = 'caret-down';
-    trendText = `-${change}`;
-  }
-
-  const cropImageSource = CROP_IMAGES[crop_id] || null;
-
-  return (
-    <View style={styles.priceCard}>
-      <View style={styles.cropVisuals}>
-        {cropImageSource && <Image source={cropImageSource} style={styles.cropImage} />}
-        <View style={styles.cropInfo}>
-          <Text style={styles.cropTitle}>{name}</Text>
-          <Text style={styles.cropUnit}>{t('price_per_unit')} {unit}</Text>
-        </View>
-      </View>
-      <View style={styles.priceDetails}>
-        <Text style={styles.cropPrice}>₹ {price}</Text>
-        <View style={[styles.trendContainer, { borderColor: trendColor }]}>
-          <FontAwesome5 name={trendIcon as any} size={14} color={trendColor} style={styles.trendIcon} />
-          <Text style={[styles.trendText, { color: trendColor }]}>{trendText}</Text>
-        </View>
-      </View>
-    </View>
-  );
-};
-
-=======
 // --- 1. IMPORT SVGs ---
 import BananaIcon from '../assets/images/Banana.svg';
 import PepperIcon from '../assets/images/black_pepper.svg';
@@ -80,9 +27,7 @@ const CashewImg = require('../assets/images/crops/cashew.png');
 
 const PIXEL_FONT = 'monospace';
 
->>>>>>> a4fd874994a7af7f477e5044eb26d2a0e41223de
 export default function MarketPricesScreen() {
-  const { t, isLoading: isTransLoading } = useTranslation();
   const [prices, setPrices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -117,15 +62,6 @@ export default function MarketPricesScreen() {
     fetchPrices();
   }, []);
 
-<<<<<<< HEAD
-  if (loading || isTransLoading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#388e3c" /></View>
-      </SafeAreaView>
-    );
-  }
-=======
   const filteredPrices = prices.filter(p => 
     p.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -161,24 +97,10 @@ export default function MarketPricesScreen() {
     const date = new Date(isoString);
     return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
   };
->>>>>>> a4fd874994a7af7f477e5044eb26d2a0e41223de
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="light" />
-<<<<<<< HEAD
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        <View style={styles.summaryBox}>
-          <Text style={styles.summaryTitle}>{t('all_india_prices')}</Text>
-          <Text style={styles.summaryDate}>{t('live_data')}</Text>
-          <Text style={styles.summaryTip}>{t('price_source_tip')}</Text>
-        </View>
-        <View style={styles.pricesList}>
-          {/* Pass 't' function down to PriceCard */}
-          {prices.map((data) => <PriceCard key={data.id} t={t} {...data} />)}
-        </View>
-      </ScrollView>
-=======
       
       {/* Header Section */}
       <View style={styles.header}>
@@ -265,7 +187,6 @@ export default function MarketPricesScreen() {
           )}
         </ScrollView>
       )}
->>>>>>> a4fd874994a7af7f477e5044eb26d2a0e41223de
     </SafeAreaView>
   );
 }
