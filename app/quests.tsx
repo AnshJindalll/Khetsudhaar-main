@@ -13,6 +13,8 @@ import {
   View
 } from 'react-native';
 
+import { useTranslation } from '@/hooks/useTranslation';
+
 // Assets from your repo
 import Qcoin from '../assets/images/Qcoin.svg';
 import Checkmark from '../assets/images/check.svg';
@@ -64,6 +66,8 @@ const QuestItem = ({
 
 export default function QuestsScreen() {
   const router = useRouter();
+  const { t, isLoading: isTransLoading } = useTranslation(); 
+  
   const [quests, setQuests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [userRank, setUserRank] = useState<number | string>('-');
@@ -123,43 +127,44 @@ export default function QuestsScreen() {
     }, [])
   );
 
+  if (loading || isTransLoading) { 
+    return <SafeAreaView style={styles.loadingContainer}><ActivityIndicator size="large" color="#388E3C" /></SafeAreaView>;
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="light" />
-      {loading ? (
-        <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#388E3C" /></View>
-      ) : (
-        <ScrollView 
-          contentContainerStyle={styles.scrollContainer}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchData(); }} tintColor="#388E3C"/>}
-        >
-          <Text style={styles.mainTitle}>MONTHLY QUESTS</Text>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContainer}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchData(); }} tintColor="#388E3C"/>}
+      >
+        {/* --- USE TRANSLATION HERE --- */}
+        <Text style={styles.mainTitle}>{t('monthly_quests')}</Text> 
 
-          {quests.map((quest) => (
-            <QuestItem
-              key={quest.id}
-              title={quest.title}
-              subtitle={quest.subtitle}
-              description={quest.description}
-              points={quest.xp_reward}
-              isCompleted={quest.isCompleted}
-              onPress={() => router.push({ pathname: '/quest-details', params: { id: quest.id } })}
-            />
-          ))}
+        {quests.map((quest) => (
+          <QuestItem
+            key={quest.id}
+            title={quest.title}
+            subtitle={quest.subtitle}
+            description={quest.description}
+            points={quest.xp_reward}
+            isCompleted={quest.isCompleted}
+            onPress={() => router.push({ pathname: '/quest-details', params: { id: quest.id } })}
+          />
+        ))}
 
-          {/* Leaderboard Widget */}
-          <View style={styles.leaderboardContainer}>
-            <View>
-              <Text style={styles.leaderboardLabel}>CURRENT</Text>
-              <Text style={styles.leaderboardLabel}>LEADERBOARD</Text>
-              <Text style={styles.leaderboardLabel}>POSITION</Text>
-            </View>
-            <View style={styles.leaderboardRankBox}>
-              <Text style={styles.leaderboardRank}>{userRank}</Text>
-            </View>
+        {/* Leaderboard Widget */}
+        <View style={styles.leaderboardContainer}>
+          <View>
+            <Text style={styles.leaderboardLabel}>{t('current_leaderboard_position')}</Text>
+            <Text style={styles.leaderboardLabel}>{t('leaderboard')}</Text>
+            <Text style={styles.leaderboardLabel}>POSITION</Text>
           </View>
-        </ScrollView>
-      )}
+          <View style={styles.leaderboardRankBox}>
+            <Text style={styles.leaderboardRank}>{userRank}</Text>
+          </View>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }

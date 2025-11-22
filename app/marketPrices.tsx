@@ -12,6 +12,8 @@ import {
   View
 } from 'react-native';
 
+import { useTranslation } from '@/hooks/useTranslation';
+
 const PIXEL_FONT = 'monospace';
 
 // Image Map
@@ -24,7 +26,7 @@ const CROP_IMAGES: { [key: string]: any } = {
   ginger: require('../assets/images/crops/ginger.png'),
 };
 
-const PriceCard: React.FC<any> = ({ crop_id, name, unit, price, trend, change }) => {
+const PriceCard: React.FC<any> = ({ t, crop_id, name, unit, price, trend, change }) => {
   let trendColor = '#B0B0B0';
   let trendIcon = 'minus';
   let trendText = 'STABLE';
@@ -47,7 +49,7 @@ const PriceCard: React.FC<any> = ({ crop_id, name, unit, price, trend, change })
         {cropImageSource && <Image source={cropImageSource} style={styles.cropImage} />}
         <View style={styles.cropInfo}>
           <Text style={styles.cropTitle}>{name}</Text>
-          <Text style={styles.cropUnit}>Price per {unit}</Text>
+          <Text style={styles.cropUnit}>{t('price_per_unit')} {unit}</Text>
         </View>
       </View>
       <View style={styles.priceDetails}>
@@ -62,6 +64,7 @@ const PriceCard: React.FC<any> = ({ crop_id, name, unit, price, trend, change })
 };
 
 export default function MarketPricesScreen() {
+  const { t, isLoading: isTransLoading } = useTranslation();
   const [prices, setPrices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -76,23 +79,28 @@ export default function MarketPricesScreen() {
     fetchPrices();
   }, []);
 
+  if (loading || isTransLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#388e3c" /></View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="light" />
-      {loading ? (
-        <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#388e3c" /></View>
-      ) : (
-        <ScrollView contentContainerStyle={styles.scrollContainer}>
-          <View style={styles.summaryBox}>
-            <Text style={styles.summaryTitle}>ALL INDIA SPOT PRICES</Text>
-            <Text style={styles.summaryDate}>Live Data</Text>
-            <Text style={styles.summaryTip}>Prices fetched from mandi records.</Text>
-          </View>
-          <View style={styles.pricesList}>
-            {prices.map((data) => <PriceCard key={data.id} {...data} />)}
-          </View>
-        </ScrollView>
-      )}
+      <ScrollView contentContainerStyle={styles.scrollContainer}>
+        <View style={styles.summaryBox}>
+          <Text style={styles.summaryTitle}>{t('all_india_prices')}</Text>
+          <Text style={styles.summaryDate}>{t('live_data')}</Text>
+          <Text style={styles.summaryTip}>{t('price_source_tip')}</Text>
+        </View>
+        <View style={styles.pricesList}>
+          {/* Pass 't' function down to PriceCard */}
+          {prices.map((data) => <PriceCard key={data.id} t={t} {...data} />)}
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }

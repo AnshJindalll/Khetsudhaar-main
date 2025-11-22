@@ -13,58 +13,124 @@ import {
 } from 'react-native';
 
 import { supabase } from '@/utils/supabase';
+import { useTranslation } from '@/hooks/useTranslation'; 
+import { DEFAULT_LANGUAGE } from '@/constants/translations'; 
 
 interface LessonDetail {
   id: number;
-  title: string;
+  title: string; 
   sequence: number;
-  content: string; 
+  content: string; // This will hold the fetched localized content
   points: number;
   theme: string | null;
 }
 
-const fetchLessonById = async (lessonId: number): Promise<LessonDetail | null> => {
-  const { data, error } = await supabase
-    .from('lessons')
-    .select('id, title, sequence, content, points, theme')
-    .eq('id', lessonId)
-    .single();
+/**
+ * Fetches a single lesson using the user's language preference with safe fallbacks.
+ * The core logic is wrapped in a try/catch to run a safe (English-only) query if 
+ * the localized query fails due to missing database columns.
+ */
+const fetchLessonById = async (lessonId: number, langCode: string): Promise<LessonDetail | null> => {
+  
+  const fallbackTitleColumn = `title_${DEFAULT_LANGUAGE}`;
+  const fallbackContentColumn = `content_${DEFAULT_LANGUAGE}`;
+  const localizedTitleColumn = `title_${langCode}`;
+  const localizedContentColumn = `content_${langCode}`;
 
-  if (error) {
-    console.error('Error fetching lesson:', error.message);
-    return null;
+  // Start with fields we know exist (the English fallback fields)
+  let selectFields = `id, sequence, points, theme, ${fallbackTitleColumn}, ${fallbackContentColumn}`;
+
+  // If the user's preferred language is not the default, try to select the localized columns too.
+  // This is the query that can fail if the column doesn't exist in the database.
+  if (langCode !== DEFAULT_LANGUAGE) {
+    selectFields += `, ${localizedTitleColumn}, ${localizedContentColumn}`;
   }
-  return data as LessonDetail;
+
+  try {
+    const { data, error } = await supabase
+      .from('lessons')
+      .select(selectFields)
+      .eq('id', lessonId)
+      .single();
+
+    if (error) {
+      // If the query fails here, we throw an error to trigger the catch block below.
+      console.error(`Localized Fetch Failed for ${langCode}: ${error.message}. Running fallback query...`);
+      throw new Error("Localized query failed, attempting English fallback.");
+    }
+    
+    const fetchedData = data as any; 
+    
+    // Client-Side Fallback Logic:
+    // Use localized value first, then English fallback.
+    const finalTitle = fetchedData[localizedTitleColumn] || fetchedData[fallbackTitleColumn] || 'Lesson Title Missing';
+    const finalContent = fetchedData[localizedContentColumn] || fetchedData[fallbackContentColumn] || 'No content available.';
+
+    return {
+      id: fetchedData.id,
+      sequence: fetchedData.sequence,
+      points: fetchedData.points,
+      theme: fetchedData.theme,
+      title: finalTitle,
+      content: finalContent,
+    } as LessonDetail;
+
+  } catch (initialError) {
+    // If the initial query failed, run the ultra-safe query:
+    try {
+        const safeSelectFields = `id, sequence, points, theme, ${fallbackTitleColumn}, ${fallbackContentColumn}`;
+        
+        const { data: safeData, error: safeError } = await supabase
+          .from('lessons')
+          .select(safeSelectFields)
+          .eq('id', lessonId)
+          .single();
+          
+        if (safeError) throw safeError;
+        
+        const safeFetchedData = safeData as any;
+        
+        // Return guaranteed data (English fallback)
+        return {
+          id: safeFetchedData.id,
+          sequence: safeFetchedData.sequence,
+          points: safeFetchedData.points,
+          theme: safeFetchedData.theme,
+          title: safeFetchedData[fallbackTitleColumn] || 'Lesson Title Missing (Fallback)',
+          content: safeFetchedData[fallbackContentColumn] || 'No content available (Fallback).',
+        } as LessonDetail;
+        
+    } catch (finalError: any) {
+        // If even the safe English query fails, the database is severely broken or offline.
+        console.error('FATAL DB ERROR: Could not retrieve base lesson data:', finalError.message);
+        Alert.alert('Data Error', 'Could not retrieve base lesson data.');
+        return null;
+    }
+  }
 };
 
 const markLessonComplete = async (lesson: LessonDetail): Promise<{success: boolean, sequence: number}> => {
   const { data: sessionData } = await supabase.auth.getSession();
   const userId = sessionData.session?.user.id;
 
-  // --- GUEST LOGIC: Allow proceed without saving ---
   if (!userId) {
     return { success: true, sequence: lesson.sequence };
   }
 
-  // 1. Insert into user_lessons (Mark as Done)
   const { error: insertError } = await supabase
     .from('user_lessons')
     .insert([{ user_id: userId, lesson_id: lesson.id, completed_at: new Date().toISOString() }])
     .select()
     .maybeSingle();
 
-  // 2. Handle Errors (Ignore duplicate key error 23505 if already completed)
   if (insertError) {
     if (insertError.code === '23505') {
-      // Already completed, just return success without adding points again
       return { success: true, sequence: lesson.sequence };
     }
     Alert.alert('Error', 'Failed to save progress.');
     return { success: false, sequence: lesson.sequence };
   }
 
-  // 3. AWARD COINS (Only if this is the first time completing it - i.e. no insertError)
-  // A. Get current balance
   const { data: profile } = await supabase
     .from('profiles')
     .select('coins, xp')
@@ -73,15 +139,12 @@ const markLessonComplete = async (lesson: LessonDetail): Promise<{success: boole
 
   if (profile) {
     const newCoins = (profile.coins || 0) + lesson.points;
-    const newXp = (profile.xp || 0) + lesson.points; // Assuming points = XP
+    const newXp = (profile.xp || 0) + lesson.points; 
 
-    // B. Update profile
-    const { error: updateError } = await supabase
+    await supabase
       .from('profiles')
       .update({ coins: newCoins, xp: newXp })
       .eq('id', userId);
-      
-    if (updateError) console.error("Error awarding coins:", updateError);
   }
 
   return { success: true, sequence: lesson.sequence };
@@ -89,7 +152,7 @@ const markLessonComplete = async (lesson: LessonDetail): Promise<{success: boole
 
 const FormattedContent = ({ content }: { content: string }) => {
   if (!content) return null;
-  const cleanContent = content.replace(/\\n/g, '\n');
+  const cleanContent = content.replace(/\\n/g, '\n'); 
   const lines = cleanContent.split('\n');
 
   return (
@@ -116,6 +179,7 @@ const FormattedContent = ({ content }: { content: string }) => {
 
 export default function LessonDetailScreen() {
   const router = useRouter();
+  const { t, language, isLoading: isTransLoading } = useTranslation(); 
   const { id } = useLocalSearchParams<{ id: string }>();
   const lessonId = parseInt(id || '0', 10);
   
@@ -125,10 +189,10 @@ export default function LessonDetailScreen() {
   const [isCompleted, setIsCompleted] = useState(false); 
 
   useEffect(() => {
-    if (lessonId > 0) {
+    if (lessonId > 0 && language && !isTransLoading) { 
       const loadData = async () => {
         setLoading(true);
-        const fetchedLesson = await fetchLessonById(lessonId);
+        const fetchedLesson = await fetchLessonById(lessonId, language); 
         setLesson(fetchedLesson);
 
         if (fetchedLesson) {
@@ -146,10 +210,10 @@ export default function LessonDetailScreen() {
         setLoading(false);
       };
       loadData();
-    } else {
+    } else if (lessonId <= 0) {
       router.back();
     }
-  }, [lessonId]);
+  }, [lessonId, language, isTransLoading]);
 
   const handleComplete = async () => {
     if (!lesson || isCompleting) return;
@@ -159,12 +223,11 @@ export default function LessonDetailScreen() {
     
     if (success) {
       setIsCompleted(true);
-      // Navigate to the Quiz
       router.push({ pathname: '/quiz/[id]', params: { id: lesson.id.toString() } });
     }
   };
 
-  if (loading) {
+  if (loading || isTransLoading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#388e3c" />
@@ -179,7 +242,7 @@ export default function LessonDetailScreen() {
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <View style={styles.headerRow}>
           <Text style={styles.bigNumber}>{lesson.sequence}</Text>
-          <Text style={styles.headerTitle}>{lesson.title}</Text>
+          <Text style={styles.headerTitle}>{lesson.title}</Text> 
         </View>
 
         <View style={styles.videoPlaceholder}>
@@ -194,7 +257,7 @@ export default function LessonDetailScreen() {
           disabled={isCompleted || isCompleting}
         >
           <Text style={styles.actionButtonText}>
-            {isCompleting ? 'SAVING...' : isCompleted ? 'COMPLETED ✓' : 'TAKE QUIZ'}
+            {isCompleting ? `${t('completed')} ✓` : t('take_quiz')}
           </Text>
         </TouchableOpacity>
       </ScrollView>

@@ -1,5 +1,4 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-// ... rest of imports
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -12,8 +11,9 @@ import {
   View
 } from 'react-native';
 
-// --- IMPORT SUPABASE CLIENT ---
 import { supabase } from '../utils/supabase';
+import { useTranslation } from '@/hooks/useTranslation';
+import { DEFAULT_LANGUAGE } from '@/constants/translations';
 
 import Coin from '../assets/images/coin.svg';
 import Mascot from '../assets/images/Mascot.svg';
@@ -21,77 +21,142 @@ import MascotFarmer from '../assets/images/MascotFarmer.svg';
 
 // --- TYPE DEFINITIONS ---
 
-// Define the shape of data coming from the 'lessons' table
 interface LessonData {
   id: number;
-  title: string;
+  title: string; 
   description: string;
   sequence: number;
   points: number;
-  content_path: string | null;
-  theme: string | null; // Added to support your custom styling
+  theme: string | null; 
 }
 
-// Define the final state structure for the UI
 interface Lesson extends LessonData {
   status: 'current' | 'completed' | 'locked';
 }
 
-// --- DATA FETCHING & PROCESSING LOGIC ---
+// Helper to determine lesson completion status
+const determineStatus = (allLessons: LessonData[], completedIds: Set<number>, userId: string | undefined): Lesson[] => {
+    let lastCompletedId = 0;
+    
+    if (userId) {
+        const completedSequences = allLessons
+          .filter(l => completedIds.has(l.id))
+          .map(l => l.sequence);
+        
+        if (completedSequences.length > 0) {
+          lastCompletedId = Math.max(...completedSequences);
+        }
+    }
+    
+    return allLessons.map(lesson => {
+        const isCompleted = completedIds.has(lesson.id); 
+        let status: 'current' | 'completed' | 'locked' = 'locked';
+
+        if (isCompleted) {
+          status = 'completed';
+        } else if (lesson.sequence === lastCompletedId + 1) {
+          status = 'current';
+        } else if (lastCompletedId === 0 && lesson.sequence === 1) {
+          status = 'current';
+        }
+
+        return { ...lesson, status } as Lesson;
+    });
+};
 
 /**
- * Fetches all available lessons and merges them with the user's completed status.
+ * Fetches all available lessons using the user's language preference with absolute safety.
  */
-const fetchLessonsAndProgress = async (): Promise<{lessons: Lesson[], lastCompletedId: number}> => {
+const fetchLessonsAndProgress = async (langCode: string): Promise<{lessons: Lesson[], lastCompletedId: number}> => {
   const { data: sessionData } = await supabase.auth.getSession();
   const userId = sessionData.session?.user.id;
+  const isGuest = !userId;
+  
+  const fallbackTitleColumn = `title_${DEFAULT_LANGUAGE}`;
+  const fallbackDescriptionColumn = `description_${DEFAULT_LANGUAGE}`;
+  const localizedTitleColumn = `title_${langCode}`;
+  const localizedDescriptionColumn = `description_${langCode}`;
 
-  if (!userId) {
-    // If no user, treat all lessons as locked and uncompleted
-    const { data: allLessons } = await supabase
+  let rawLessons: any[] | null = null;
+  let finalLangCode = langCode;
+
+  // 1. ATTEMPT localized query with safety fields
+  let selectFields = [
+    'id', 
+    'sequence', 
+    'points', 
+    'theme', 
+    fallbackTitleColumn,
+    fallbackDescriptionColumn,
+  ];
+
+  if (langCode !== DEFAULT_LANGUAGE) {
+    selectFields.push(localizedTitleColumn, localizedDescriptionColumn);
+  }
+  
+  try {
+    const { data, error } = await supabase
       .from('lessons')
-      .select('*')
+      .select(selectFields.join(','))
       .order('sequence', { ascending: true })
-      .returns<LessonData[]>();
+      .returns<any[]>();
+      
+    if (error) {
+        console.warn(`Localized query failed for ${langCode}. Switching to English fallback.`);
+        throw new Error("Localized query failed.");
+    }
+    rawLessons = data;
     
-    const guestLessons: Lesson[] = (allLessons || []).map(lesson => ({
-      ...lesson,
-      status: lesson.sequence === 1 ? 'current' : 'locked', // Allow first lesson to be current for guest/new user
-    }));
+  } catch (initialError) {
+    // 2. RUN SAFE (English-only) FALLBACK QUERY
+    finalLangCode = DEFAULT_LANGUAGE;
+    const safeSelectFields = [
+        'id', 'sequence', 'points', 'theme', fallbackTitleColumn, fallbackDescriptionColumn
+    ].join(',');
 
-    return { lessons: guestLessons, lastCompletedId: 0 };
+    const { data: safeData, error: safeError } = await supabase
+      .from('lessons')
+      .select(safeSelectFields)
+      .order('sequence', { ascending: true })
+      .returns<any[]>();
+
+    if (safeError) {
+      console.error('FATAL DB ERROR: Could not retrieve base lesson data:', safeError.message);
+      Alert.alert('Data Error', 'Failed to load lessons from the server.');
+      return { lessons: [], lastCompletedId: 0 };
+    }
+    rawLessons = safeData;
   }
+  
+  // 3. Process data
+  const completedLessons = isGuest
+    ? []
+    : (await supabase.from('user_lessons').select('lesson_id').eq('user_id', userId)).data || [];
+  const completedIds = new Set(completedLessons.map(c => c.lesson_id));
 
-  // 1. Fetch ALL lessons
-  const { data: allLessons, error: lessonsError } = await supabase
-    .from('lessons')
-    .select('*')
-    .order('sequence', { ascending: true })
-    .returns<LessonData[]>();
+  const cleanedLessons: LessonData[] = (rawLessons || []).map(lesson => {
+      const currentTitleKey = `title_${finalLangCode}`;
+      const currentDescriptionKey = `description_${finalLangCode}`;
+      const fallbackTitleKey = `title_${DEFAULT_LANGUAGE}`;
+      const fallbackDescriptionKey = `description_${DEFAULT_LANGUAGE}`;
 
-  if (lessonsError) {
-    console.error('Error fetching lessons:', lessonsError.message);
-    Alert.alert('Data Error', 'Failed to load lessons from the server.');
-    return { lessons: [], lastCompletedId: 0 };
-  }
+      return {
+          id: lesson.id,
+          sequence: lesson.sequence,
+          points: lesson.points,
+          theme: lesson.theme,
+          title: lesson[currentTitleKey] || lesson[fallbackTitleKey] || 'Lesson Title Missing', 
+          description: lesson[currentDescriptionKey] || lesson[fallbackDescriptionKey] || 'Lesson description missing.',
+      };
+  });
+  
+  const finalLessons = determineStatus(cleanedLessons, completedIds, userId);
 
-  // 2. Fetch User's completed lessons
-  const { data: completedLessons, error: progressError } = await supabase
-    .from('user_lessons')
-    .select('lesson_id')
-    .eq('user_id', userId);
-
-  if (progressError) {
-    console.warn('Error fetching user progress:', progressError.message);
-  }
-
-  const completedIds = new Set((completedLessons || []).map(c => c.lesson_id));
-
-  // Determine the sequence number of the most recently completed lesson
+  // Recalculate lastCompletedId 
   let lastCompletedId = 0;
-  if (completedLessons) {
-    const completedSequences = allLessons
-      .filter(l => completedIds.has(l.id))
+  if (userId) {
+    const completedSequences = finalLessons
+      .filter(l => l.status === 'completed')
       .map(l => l.sequence);
     
     if (completedSequences.length > 0) {
@@ -99,30 +164,10 @@ const fetchLessonsAndProgress = async (): Promise<{lessons: Lesson[], lastComple
     }
   }
 
-  // 3. Combine data and determine status
-  const finalLessons: Lesson[] = (allLessons || []).map(lesson => {
-    const isCompleted = completedIds.has(lesson.id);
-    let status: 'current' | 'completed' | 'locked' = 'locked';
-
-    if (isCompleted) {
-      status = 'completed';
-    } else if (lesson.sequence === lastCompletedId + 1) {
-      status = 'current';
-    } else if (lastCompletedId === 0 && lesson.sequence === 1) {
-      // Allow the first lesson to be current if nothing is completed
-      status = 'current';
-    }
-
-    return {
-      ...lesson,
-      status,
-    } as Lesson;
-  });
-  
   return { lessons: finalLessons, lastCompletedId };
 };
 
-// --- Reusable Lesson Card Component ---
+// --- Reusable Lesson Card Component (remains the same) ---
 interface LessonCardProps {
   lesson: Lesson;
   isCurrent?: boolean;
@@ -132,17 +177,14 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson, isCurrent = false }) =>
   const router = useRouter();
   const { id, title, description, points, status, theme } = lesson;
 
-  // --- STYLE LOGIC ---
   const cardStyle = [
     styles.lessonCard,
     isCurrent && styles.currentLessonCard,
     status === 'completed' && styles.completedLessonCard,
     status === 'locked' && styles.lockedLessonCard,
-    // Apply special theme style only if it's not completed
     theme === 'women' && status !== 'completed' && styles.womenLessonCard,
   ];
 
-  // Logic to determine if the lesson is actionable
   const isActionable = status !== 'locked';
 
   return (
@@ -152,7 +194,7 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson, isCurrent = false }) =>
       onPress={() =>
         router.push({
           pathname: '/lesson/[id]',
-          params: { id: id }, // Use the Supabase 'id' for routing
+          params: { id: id }, 
         })
       }>
       <Text style={[styles.lessonNumber, isCurrent && styles.currentLessonNumber]}>
@@ -164,7 +206,7 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson, isCurrent = false }) =>
           <Text style={styles.lessonDescription}>{description}</Text>
         )}
         <View style={styles.pointsContainer}>
-          <Coin width={24} height={24} style={styles.coinIcon} />
+          <Coin width={24} height={24} style={styles.coinIcon} /> 
           <Text style={styles.pointsText}>{points}</Text>
         </View>
       </View>
@@ -176,26 +218,28 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson, isCurrent = false }) =>
 // --- LESSONS SCREEN MAIN COMPONENT ---
 export default function LessonsScreen() {
   const { lesson_completed } = useLocalSearchParams<{ lesson_completed?: string }>();
+  const { t, language, isLoading: isTransLoading } = useTranslation();
+  
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastCompletedSeq, setLastCompletedSeq] = useState(0);
 
-  // Load lessons from Supabase on component mount
   const loadLessons = useCallback(async () => {
+    if (!language) return; 
+
     setLoading(true);
-    const { lessons: fetchedLessons, lastCompletedId: completedSeq } = await fetchLessonsAndProgress();
+    const { lessons: fetchedLessons, lastCompletedId: completedSeq } = await fetchLessonsAndProgress(language);
     setLessons(fetchedLessons);
     setLastCompletedSeq(completedSeq);
     setLoading(false);
-  }, []);
+  }, [language]); 
 
   useEffect(() => {
-    // Re-run loadLessons whenever the screen is focused or 'lesson_completed' parameter changes
-    // The router replace in LoginScreen uses this param for simple navigation signaling
-    loadLessons(); 
-  }, [lesson_completed, loadLessons]);
+    if (!isTransLoading) {
+        loadLessons(); 
+    }
+  }, [lesson_completed, loadLessons, isTransLoading]);
   
-  // Use useMemo to filter and compute sections only when 'lessons' changes
   const { currentLesson, completedLessons, upcomingLessons, totalScore } = useMemo(() => {
     const current = lessons.find((l) => l.status === 'current');
     const completed = lessons.filter((l) => l.status === 'completed');
@@ -210,7 +254,7 @@ export default function LessonsScreen() {
     };
   }, [lessons]);
 
-  if (loading) {
+  if (loading || isTransLoading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#388e3c" />
@@ -225,9 +269,9 @@ export default function LessonsScreen() {
         {currentLesson && (
           <>
             <View style={styles.currentSection}>
-              <Mascot width={140} height={140} style={styles.mascot} />
+              <Mascot width={140} height={140} style={styles.mascot} /> 
               <View style={styles.currentTag}>
-                <Text style={styles.currentTagText}>CURRENT LESSON</Text>
+                <Text style={styles.currentTagText}>CURRENT {t('lessons')}</Text> 
               </View>
             </View>
             <LessonCard lesson={currentLesson} isCurrent={true} />
@@ -237,7 +281,7 @@ export default function LessonsScreen() {
         {/* Upcoming Lessons Section */}
         {upcomingLessons.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>UPCOMING LESSONS</Text>
+            <Text style={styles.sectionTitle}>UPCOMING {t('lessons')}</Text>
             {upcomingLessons.map((lesson) => (
               <LessonCard key={lesson.id} lesson={lesson} />
             ))}
@@ -247,12 +291,11 @@ export default function LessonsScreen() {
         {/* Recently Completed Section */}
         {completedLessons.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>RECENTLY COMPLETED LESSON</Text>
+            <Text style={styles.sectionTitle}>RECENTLY {t('completed')} {t('lessons')}</Text>
             <View style={styles.completedSectionHeader}>
               <MascotFarmer width={100} height={100} style={styles.farmerMascot} />
               <Text style={styles.totalScore}>TOTAL SCORE {totalScore}</Text>
             </View>
-            {/* Sort completed lessons in reverse sequence order so latest is first */}
             {completedLessons.sort((a, b) => b.sequence - a.sequence).map((lesson) => (
               <LessonCard key={lesson.id} lesson={lesson} />
             ))}

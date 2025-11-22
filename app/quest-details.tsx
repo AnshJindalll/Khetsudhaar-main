@@ -12,12 +12,15 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+
+import { useTranslation } from '@/hooks/useTranslation';
 import Coin from '../assets/images/Qcoin.svg';
 
 const PIXEL_FONT = 'monospace';
 
 export default function QuestDetailsScreen() {
     const router = useRouter();
+    const { t, isLoading: isTransLoading } = useTranslation();
     const { id } = useLocalSearchParams(); 
     
     const [quest, setQuest] = useState<any>(null);
@@ -72,7 +75,7 @@ export default function QuestDetailsScreen() {
         }
     };
 
-    if (loading) return <SafeAreaView style={styles.loadingContainer}><ActivityIndicator size="large" color="#4CAF50" /></SafeAreaView>;
+    if (loading || isTransLoading) return <SafeAreaView style={styles.loadingContainer}><ActivityIndicator size="large" color="#4CAF50" /></SafeAreaView>;
     if (!quest) return <SafeAreaView style={styles.loadingContainer}><Text style={{color:'white'}}>Quest not found.</Text></SafeAreaView>;
 
     return (
@@ -124,7 +127,7 @@ export default function QuestDetailsScreen() {
                         onPress={handleAction}
                     >
                         <Text style={styles.actionButtonText}>
-                            {isCompleted ? 'QUEST COMPLETED' : 'TAKE QUIZ TO VERIFY'}
+                            {isCompleted ? 'QUEST COMPLETED' : t('take_quiz_to_verify')}
                         </Text>
                         {!isCompleted && <FontAwesome5 name="arrow-right" size={16} color="white" style={{marginLeft: 10}} />}
                     </TouchableOpacity>

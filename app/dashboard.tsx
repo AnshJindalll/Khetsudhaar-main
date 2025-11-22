@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 
 import { supabase } from '@/utils/supabase';
+import { useTranslation } from '@/hooks/useTranslation';
 
 import Coin from '../assets/images/coin.svg';
 import LeaderBoard from '../assets/images/LeaderBoard.svg';
@@ -33,6 +34,7 @@ const HubButton = ({ icon, label, onPress, style, textStyle }: any) => (
 
 export default function DashboardScreen() {
   const router = useRouter();
+  const { t, isLoading: isTransLoading } = useTranslation(); 
   const [loading, setLoading] = useState(true);
   const [nextLesson, setNextLesson] = useState<any>(null);
 
@@ -76,58 +78,62 @@ export default function DashboardScreen() {
     }, [])
   );
 
+  if (loading || isTransLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#388e3c" /></View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="light" />
-      {loading ? (
-        <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#388e3c" /></View>
-      ) : (
-        <ScrollView contentContainerStyle={styles.scrollContainer}>
+      <ScrollView contentContainerStyle={styles.scrollContainer}>
 
-          <View style={styles.currentLessonContainer}>
-            <MascotFarmer width={120} height={120} style={styles.mascot} />
-            {nextLesson ? (
-              <TouchableOpacity
-                style={[styles.currentLessonCardBase, styles.currentLessonCardGlow]}
-                onPress={() => nextLesson.id && router.push({ pathname: '/lesson/[id]', params: { id: nextLesson.id.toString() } })}>
-                <View style={styles.lessonInfo}>
-                  <Text style={styles.currentLessonTitle}>{nextLesson.isAllComplete ? 'COURSE COMPLETE!' : 'CONTINUE LEARNING'}</Text>
-                  <View style={styles.lessonRow}>
-                    <Text style={styles.lessonNumber}>{nextLesson.sequence}</Text>
-                    <View style={styles.lessonDetails}>
-                      <Text style={styles.lessonTitle} numberOfLines={2}>{nextLesson.title}</Text>
-                    </View>
-                    <View style={styles.pointsContainer}>
-                      <Coin width={20} height={20} style={styles.coinIcon} />
-                      <Text style={styles.pointsText}>{nextLesson.points}</Text>
-                    </View>
+        <View style={styles.currentLessonContainer}>
+          <MascotFarmer width={120} height={120} style={styles.mascot} />
+          {nextLesson ? (
+            <TouchableOpacity
+              style={[styles.currentLessonCardBase, styles.currentLessonCardGlow]}
+              onPress={() => nextLesson.id && router.push({ pathname: '/lesson/[id]', params: { id: nextLesson.id.toString() } })}>
+              <View style={styles.lessonInfo}>
+                <Text style={styles.currentLessonTitle}>{nextLesson.isAllComplete ? 'COURSE COMPLETE!' : t('continue_learning')}</Text>
+                <View style={styles.lessonRow}>
+                  <Text style={styles.lessonNumber}>{nextLesson.sequence}</Text>
+                  <View style={styles.lessonDetails}>
+                    <Text style={styles.lessonTitle} numberOfLines={2}>{nextLesson.title}</Text>
                   </View>
-                  <Text style={styles.lessonDescription} numberOfLines={2}>{nextLesson.description}</Text>
+                  <View style={styles.pointsContainer}>
+                    <Coin width={20} height={20} style={styles.coinIcon} />
+                    <Text style={styles.pointsText}>{nextLesson.points}</Text>
+                  </View>
                 </View>
-              </TouchableOpacity>
-            ) : (
-              <View style={styles.currentLessonCardBase}><Text style={{ color: 'white' }}>No lessons available.</Text></View>
-            )}
-          </View>
+                <Text style={styles.lessonDescription} numberOfLines={2}>{nextLesson.description}</Text>
+              </View>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.currentLessonCardBase}><Text style={{ color: 'white' }}>No lessons available.</Text></View>
+          )}
+        </View>
 
-          {/* Grid Buttons */}
-          <View style={styles.gridContainer}>
-            <View style={styles.gridRow}>
-              <HubButton label="QUESTS" icon={<Quest width={80} height={80} />} onPress={() => router.push('/quests')} style={[styles.buttonSquare, styles.questsButton]} textStyle={styles.squareButtonText} />
-              <HubButton label="LEADERBOARD" icon={<LeaderBoard width={80} height={80} />} onPress={() => router.push('/leaderboard')} style={[styles.buttonSquare, styles.leaderboardButton]} textStyle={styles.squareButtonText} />
-            </View>
-            <View style={styles.gridRow}>
-              <HubButton label="REWARDS" icon={<Reward width={80} height={80} />} onPress={() => router.push('/reward-root')} style={[styles.buttonRect, styles.rewardsButton]} textStyle={styles.rectButtonText} />
-            </View>
-            <View style={styles.gridRow}>
-              <HubButton label="LESSONS" icon={<Lessons width={80} height={80} />} onPress={() => router.push({ pathname: '/lessons', params: { lesson_completed: '0' } })} style={[styles.buttonRect, styles.lessonsButton]} textStyle={styles.rectButtonText} />
-            </View>
-            <View style={styles.gridRow}>
-              <HubButton label="MARKET PRICES" icon={<MarketPrice width={80} height={80} />} onPress={() => router.push('/marketPrices')} style={[styles.buttonRect, styles.marketButton]} textStyle={styles.rectButtonText} />
-            </View>
+        {/* Grid Buttons - USE TRANSLATION */}
+        <View style={styles.gridContainer}>
+          <View style={styles.gridRow}>
+            <HubButton label={t('monthly_quests')} icon={<Quest width={80} height={80} />} onPress={() => router.push('/quests')} style={[styles.buttonSquare, styles.questsButton]} textStyle={styles.squareButtonText} />
+            <HubButton label={t('leaderboard')} icon={<LeaderBoard width={80} height={80} />} onPress={() => router.push('/leaderboard')} style={[styles.buttonSquare, styles.leaderboardButton]} textStyle={styles.squareButtonText} />
           </View>
-        </ScrollView>
-      )}
+          <View style={styles.gridRow}>
+            <HubButton label={t('rewards')} icon={<Reward width={80} height={80} />} onPress={() => router.push('/reward-root')} style={[styles.buttonRect, styles.rewardsButton]} textStyle={styles.rectButtonText} />
+          </View>
+          <View style={styles.gridRow}>
+            <HubButton label={t('lessons')} icon={<Lessons width={80} height={80} />} onPress={() => router.push({ pathname: '/lessons', params: { lesson_completed: '0' } })} style={[styles.buttonRect, styles.lessonsButton]} textStyle={styles.rectButtonText} />
+          </View>
+          <View style={styles.gridRow}>
+            <HubButton label={t('market_prices')} icon={<MarketPrice width={80} height={80} />} onPress={() => router.push('/marketPrices')} style={[styles.buttonRect, styles.marketButton]} textStyle={styles.rectButtonText} />
+          </View>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }

@@ -14,12 +14,14 @@ import {
 } from 'react-native';
 
 import { supabase } from '@/utils/supabase';
+import { useTranslation } from '@/hooks/useTranslation';
 import QCoin from '../assets/images/Qcoin.svg';
 
 const PIXEL_FONT = 'monospace';
 
 export default function QuizScreen() {
     const router = useRouter();
+    const { t, isLoading: isTransLoading } = useTranslation();
     const { id } = useLocalSearchParams(); 
     
     const [quizData, setQuizData] = useState<any>(null);
@@ -62,10 +64,19 @@ export default function QuizScreen() {
             try {
                 const { data: { session } } = await supabase.auth.getSession();
                 if (session?.user) {
+                    // Update user_quests
                     await supabase.from('user_quests').insert({ 
                         user_id: session.user.id, 
                         quest_id: quizData.id 
                     });
+                    
+                    // Update profile XP/Coins for Quest Completion
+                    const { data: profile } = await supabase.from('profiles').select('xp, quest_coins').eq('id', session.user.id).single();
+                    if (profile) {
+                       const newXP = (profile.xp || 0) + quizData.xp_reward;
+                       const newQuestCoins = (profile.quest_coins || 0) + 1; // Assuming +1 Quest Coin per completed quest
+                       await supabase.from('profiles').update({ xp: newXP, quest_coins: newQuestCoins }).eq('id', session.user.id);
+                    }
                 }
             } catch (err) {
                 console.error("Save error", err);
@@ -77,14 +88,17 @@ export default function QuizScreen() {
 
     const handleContinue = () => {
         if (resultState === 'correct') {
-            router.replace('/quests');
+            router.replace('/quests'); // Go back to quest list to see the completed status
         } else {
             setResultState('none');
             setSelectedAnswer(null);
         }
     };
+    
+    if (loading || isTransLoading) return <SafeAreaView style={styles.loadingContainer}><ActivityIndicator size="large" color="#4CAF50" /></SafeAreaView>;
 
-    if (loading) return <SafeAreaView style={styles.loadingContainer}><ActivityIndicator size="large" color="#4CAF50" /></SafeAreaView>;
+    const winXPText = t('win_xp').replace('{xp}', quizData.xp_reward.toString());
+    const explanationText = quizData.quiz_explanation || t('review_lesson');
 
     return (
         <SafeAreaView style={styles.container}>
@@ -93,16 +107,16 @@ export default function QuizScreen() {
 
                 {/* Header */}
                 <View style={styles.header}>
-                    <Text style={styles.headerTitle}>KNOWLEDGE CHECK</Text>
+                    <Text style={styles.headerTitle}>{t('knowledge_check')}</Text>
                     <View style={styles.xpTag}>
                         <QCoin width={16} height={16} />
-                        <Text style={styles.xpText}>Win {quizData.xp_reward} XP</Text>
+                        <Text style={styles.xpText}>{winXPText}</Text>
                     </View>
                 </View>
 
                 {/* Question Card */}
                 <View style={styles.questionCard}>
-                    <Text style={styles.questionLabel}>QUESTION</Text>
+                    <Text style={styles.questionLabel}>{t('question')}</Text>
                     <Text style={styles.questionText}>{quizData.quiz_question}</Text>
                 </View>
 
@@ -110,13 +124,10 @@ export default function QuizScreen() {
                 <View style={styles.optionsContainer}>
                     {quizData.quiz_options?.map((option: string, index: number) => {
                         const isSelected = selectedAnswer === option;
-                        
-                        // FIX: Explicitly type this as "any" or "StyleProp<ViewStyle>" to stop TS errors
                         let optionStyle: any = styles.optionButton;
                         let iconName = isSelected ? "dot-circle" : "circle";
                         let iconColor = isSelected ? "#4CAF50" : "#666";
 
-                        // Visual Feedback Logic
                         if (resultState !== 'none') {
                             if (option === quizData.correct_answer) {
                                 optionStyle = styles.optionCorrect;
@@ -127,7 +138,7 @@ export default function QuizScreen() {
                                 iconName = "times-circle";
                                 iconColor = "#fff";
                             } else {
-                                optionStyle = styles.optionDisabled; // Dim others
+                                optionStyle = styles.optionDisabled; 
                             }
                         } else if (isSelected) {
                             optionStyle = styles.optionSelected;
@@ -156,11 +167,11 @@ export default function QuizScreen() {
                         <View style={{flexDirection:'row', alignItems:'center', marginBottom: 8}}>
                             <FontAwesome5 name={resultState === 'correct' ? "trophy" : "exclamation-triangle"} size={20} color="white" />
                             <Text style={styles.resultTitle}>
-                                {resultState === 'correct' ? 'EXCELLENT WORK!' : 'NOT QUITE RIGHT'}
+                                {resultState === 'correct' ? t('excellent_work') : t('not_quite_right')}
                             </Text>
                         </View>
                         <Text style={styles.explanationText}>
-                            {quizData.quiz_explanation || "Review the lesson to find the right answer."}
+                            {explanationText}
                         </Text>
                     </View>
                 )}
@@ -173,7 +184,7 @@ export default function QuizScreen() {
                             onPress={resultState === 'none' ? handleSubmit : handleContinue}
                         >
                             <Text style={styles.actionButtonText}>
-                                {resultState === 'none' ? 'SUBMIT ANSWER' : resultState === 'correct' ? 'CLAIM REWARD' : 'TRY AGAIN'}
+                                {resultState === 'none' ? t('submit_answer') : resultState === 'correct' ? t('claim_reward') : t('try_again')}
                             </Text>
                         </TouchableOpacity>
                     )}
