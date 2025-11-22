@@ -22,7 +22,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Defs, LinearGradient, Path, Stop, Text as SvgText } from 'react-native-svg';
 
-import { supabase } from '@/utils/supabase';
+import { supabase } from '../utils/supabase';
 
 // --- Assets ---
 import Coin from '../assets/images/coin.svg';
